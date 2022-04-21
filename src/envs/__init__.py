@@ -1,1 +1,2 @@
 from envs.frozen_lake_smooth_penalty import FrozenLakeSmoothPenaltyEnv
+from envs.vacuum_cleaner_env import VacuumCleanerEnv

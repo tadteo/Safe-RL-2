@@ -154,7 +154,7 @@ class FrozenLakeSmoothPenaltyEnv(discrete.DiscreteEnv):
         self.desc = desc = np.asarray(desc, dtype="c")
         self.nrow, self.ncol = nrow, ncol = desc.shape
         self.reward_range = (-1000, 1000)
-
+        
         nA = 4
         nS = nrow * ncol
 
@@ -183,15 +183,16 @@ class FrozenLakeSmoothPenaltyEnv(discrete.DiscreteEnv):
             newletter = desc[newrow, newcol]
             done = bytes(newletter) in b"GH"
             if (newletter == b"G"):
-                reward = +1000
+                reward = +1.1
             elif (newletter == b"H"):
-                reward = -1000
+                reward = -1
             elif (newletter == b"F"):
                 reward = 0.0
             elif (newletter == b"U"):
-                reward = -0.1
+                reward = -0.25
             else:
                 reward = 0.0
+            reward -= 0.1
             return newstate, reward, done
 
         for row in range(nrow):
