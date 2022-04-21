@@ -1,0 +1,1 @@
+from envs.frozen_lake_smooth_penalty import FrozenLakeSmoothPenaltyEnv
