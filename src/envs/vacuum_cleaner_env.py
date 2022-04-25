@@ -13,8 +13,7 @@ LEFT = 0
 DOWN = 1
 RIGHT = 2
 UP = 3
-SUCK = 4 #Action code for sucking
-
+# SUCK = 4 #Action code for sucking
 
 MAPS = {
     "4x4": ["SFFF", "FHFH", "FFFH", "HFFG"],
@@ -61,11 +60,11 @@ MAPS = {
         "FFFUFG",
     ],
     "6x6": [
-        "SFFFFF",
-        "FFHFFF",
+        "SGFFFF",
+        "GFHFGF",
         "FFHFHF",
         "FFFFFF",
-        "FFFHFF",
+        "FGFHFF",
         "FFFFFG",
     ],
 }
@@ -115,7 +114,6 @@ def generate_random_map(size=8, p=0.8):
         
     return ["".join(x) for x in res]
 
-
 class VacuumCleanerEnv(discrete.DiscreteEnv):
     """
     The House is dirty again (as always). And it is time to clean it, but you are very tired, for this reason you have decided
@@ -146,75 +144,118 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
             desc = generate_random_map()
         elif desc is None:
             desc = MAPS[self.map_name]
-        self.desc = desc = np.asarray(desc, dtype="c")
-        self.nrow, self.ncol = nrow, ncol = desc.shape
+        self.desc = np.asarray(desc, dtype="c")
+        # print("DESC IS",self.desc)
+        self.nrow, self.ncol = nrow, ncol = self.desc.shape
         self.reward_range = (-1000, 1000)
         
-        nA = 4
-        nS = nrow * ncol
+        self.G_count = 0
+        for c in self.desc.flatten():
+            if c == b"G":
+                self.G_count += 1
 
-        isd = np.array(desc == b"S").astype("float64").ravel()
+        # print("G_count:", self.G_count)
+        
+        self.nA = 4
+        self.nS = nrow * ncol
+
+        isd = np.array(self.desc == b"S").astype("float64").ravel()
         isd /= isd.sum()
 
-        P = {s: {a: [] for a in range(nA)} for s in range(nS)}
-
-        def to_s(row, col):
-            return row * ncol + col
-
-        def inc(row, col, a):
-            if a == LEFT:
-                col = max(col - 1, 0)
-            elif a == DOWN:
-                row = min(row + 1, nrow - 1)
-            elif a == RIGHT:
-                col = min(col + 1, ncol - 1)
-            elif a == UP:
-                row = max(row - 1, 0)
-            return (row, col)
-
-        def update_probability_matrix(row, col, action):
-            newrow, newcol = inc(row, col, action)
-            newstate = to_s(newrow, newcol)
-            newletter = desc[newrow, newcol]
-            done = bytes(newletter) in b"GH"
+        self.P = self.new_probability_matrix(self.nA,self.nS)
+        
+        super(VacuumCleanerEnv, self).__init__(self.nS, self.nA, self.P, isd)
+        
+        # pygame utils
+        self.window_size = (min(64 * ncol, 512), min(64 * nrow, 512))
+        self.window_surface = None
+        self.clock = None
+        self.human_images = None
+        self.cracked_human_img = None
+        self.ice_img = None
+        self.vacuum_cleaner_img = None
+        self.goal_img = None
+        self.start_img = None
+    
+    def new_probability_matrix(self, nA, nS):
+            P = {s: {a: [] for a in range(nA)} for s in range(nS)}
+            for row in range(self.nrow):
+                for col in range(self.ncol):
+                    s = self.to_s(row, col)
+                    for a in range(nA):
+                        li = P[s][a]
+                        # letter = self.desc[row, col]
+                        li.append((1.0, *self.update_probability_matrix(row, col, a)))
+            # print(P)
+            return P
+    
+    def to_s(self, row, col):
+        return row * self.ncol + col
+    
+    def inc(self, row, col, a):
+        if a == LEFT:
+            col = max(col - 1, 0)
+        elif a == DOWN:
+            row = min(row + 1, self.nrow - 1)
+        elif a == RIGHT:
+            col = min(col + 1, self.ncol - 1)
+        elif a == UP:
+            row = max(row - 1, 0)
+        return (row, col)
+        
+    def update_probability_matrix(self, row, col, action):
+            newrow, newcol = self.inc(row, col, action)
+            newstate = self.to_s(newrow, newcol)
+            newletter = self.desc[newrow, newcol]
+            if self.G_count == 0:
+                done = True
+            else:
+                done = False
             if (newletter == b"G"):
-                reward = +1.1
+                reward = +1
             elif (newletter == b"H"):
                 reward = -1
+                newstate = self.to_s(row,col)
             elif (newletter == b"F"):
-                reward = 0.0
+                reward = 0
             elif (newletter == b"U"):
                 reward = -0.25
             else:
                 reward = 0.0
             reward -= 0.1
             return newstate, reward, done
+    
+    def step(self, a):
+        bot_row, bot_col = self.s // self.ncol, self.s % self.ncol
+        if self.desc[bot_row,bot_col] == b"G":
+            # print("Reached a goal")
+            self.desc[bot_row, bot_col] = b"F"
+            self.G_count -= 1
+            # print("Reached a goal. New G_count: ", self.G_count)
 
-        for row in range(nrow):
-            for col in range(ncol):
-                s = to_s(row, col)
-                for a in range(4):
-                    li = P[s][a]
-                    letter = desc[row, col]
-                    if letter in b"GH":
-                        li.append((1.0, s, 0, True))
-                    else:
-                        li.append((1.0, *update_probability_matrix(row, col, a)))
-
-        super(VacuumCleanerEnv, self).__init__(nS, nA, P, isd)
-
-        # pygame utils
-        self.window_size = (min(64 * ncol, 512), min(64 * nrow, 512))
-        self.window_surface = None
-        self.clock = None
-        self.human_img = None
-        self.cracked_human_img = None
-        self.ice_img = None
-        self.vacuum_cleaner_images = None
-        self.goal_img = None
-        self.start_img = None
+            self.P = self.new_probability_matrix(self.nA,self.nS)
+            if self.G_count == 0:
+                self.done = True
+            else:
+                self.done = False
+        return super().step(a)
+    
+    
+    def reset(self):
+        self.done = False
+        if self.map_name is None:
+            desc = generate_random_map()
+        else:
+            desc = MAPS[self.map_name]
+        self.desc = np.asarray(desc, dtype="c")
         
-        
+        self.G_count = 0
+        for c in self.desc.flatten():
+            if c == b"G":
+                self.G_count += 1
+        self.P = self.new_probability_matrix(self.nA,self.nS)
+        return super().reset()
+    
     def render(self, mode="gui"):
         outfile = StringIO() if mode == "ansi" else sys.stdout
 
@@ -226,7 +267,7 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
             desc[row][col] = utils.colorize(desc[row][col], "red", highlight=True)
             if self.lastaction is not None:
                 outfile.write(
-                    "  ({})\n".format(["Left", "Down", "Right", "Up", "Suck"][self.lastaction])
+                    "  ({})\n".format(["Left", "Down", "Right", "Up"][self.lastaction])
                 )
             else:
                 outfile.write("\n")
@@ -242,6 +283,8 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
         from pygame.constants import SRCALPHA
         from os import path
         
+        # print("DESC IS", self.desc)
+        
         if self.window_surface is None:
             pygame.init()
             pygame.display.init()
@@ -250,14 +293,14 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
             
         if self.clock is None:
             self.clock = pygame.time.Clock()
-        if self.human_img is None:
+        if self.human_images is None:
             humans = [
-                path.join(path.dirname(__file__), "../../img/elf_down.png"),
+                path.join(path.dirname(__file__), "../../img/elf_right.png"),
                 path.join(path.dirname(__file__), "../../img/elf_up.png"),
                 path.join(path.dirname(__file__), "../../img/elf_left.png"),
-                path.join(path.dirname(__file__), "../../img/elf_right.png"),
+                path.join(path.dirname(__file__), "../../img/elf_down.png"),
             ]
-            self.human_img = [pygame.image.load(file_name) for file_name in humans]
+            self.human_images = [pygame.image.load(file_name) for file_name in humans]
         if self.ice_img is None:
             file_name = path.join(path.dirname(__file__), "../../img/ice.png")
             self.ice_img = pygame.image.load(file_name)
@@ -267,14 +310,9 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
         if self.start_img is None:
             file_name = path.join(path.dirname(__file__), "../../img/stool.png")
             self.start_img = pygame.image.load(file_name)
-        if self.vacuum_cleaner_images is None:
-            elfs = [
-                path.join(path.dirname(__file__), "../../img/vc.png"),
-                path.join(path.dirname(__file__), "../../img/vc.png"),
-                path.join(path.dirname(__file__), "../../img/vc.png"),
-                path.join(path.dirname(__file__), "../../img/vc.png"),
-            ]
-            self.vacuum_cleaner_images = [pygame.image.load(f_name) for f_name in elfs]
+        if self.vacuum_cleaner_img is None:
+            file_name = path.join(path.dirname(__file__), "../../img/vc.png")
+            self.vacuum_cleaner_img = pygame.image.load(file_name)
 
         cell_width = self.window_size[0] // self.ncol
         cell_height = self.window_size[1] // self.nrow
@@ -284,7 +322,7 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
 
         # prepare images
         last_action = self.lastaction if self.lastaction is not None else 1
-        elf_img = self.vacuum_cleaner_images[last_action]
+        elf_img = self.vacuum_cleaner_img
         elf_scale = min(
             small_cell_w / elf_img.get_width(),
             small_cell_h / elf_img.get_height(),
@@ -296,7 +334,7 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
         elf_img = pygame.transform.scale(elf_img, elf_dims)
         
         
-        human_img = pygame.transform.scale(self.human_img, (cell_width, cell_height))
+        human_img = pygame.transform.scale(self.human_images[3], (cell_width, cell_height))
         ice_img = pygame.transform.scale(self.ice_img, (cell_width, cell_height))
         goal_img = pygame.transform.scale(self.goal_img, (cell_width, cell_height))
         start_img = pygame.transform.scale(self.start_img, (small_cell_w, small_cell_h))
@@ -305,6 +343,7 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
             for x in range(self.ncol):
                 rect = (x * cell_width, y * cell_height, cell_width, cell_height)
                 if desc[y][x] == b"H":
+                    self.window_surface.blit(ice_img, (rect[0], rect[1]))
                     self.window_surface.blit(human_img, (rect[0], rect[1]))
                 elif desc[y][x] == b"G":
                     self.window_surface.blit(ice_img, (rect[0], rect[1]))
@@ -321,17 +360,61 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
 
         # paint the elf
         bot_row, bot_col = self.s // self.ncol, self.s % self.ncol
+       
+        
+        if (bot_row<self.ncol-1 and desc[bot_row+1][bot_col] == b"H" and last_action == DOWN):
+            cell_rect = (
+                bot_col * cell_width,
+                (bot_row+1) * cell_height,
+                cell_width,
+                cell_height,
+            )
+            # self.window_surface.blit(ice_img, (rect[0], rect[1]))
+            human_img = pygame.transform.scale(self.human_images[last_action], (cell_width, cell_height))
+            self.window_surface.blit(human_img, (cell_rect[0], cell_rect[1]))
+        elif (bot_row>0 and desc[bot_row-1][bot_col] == b"H" and last_action == UP):
+            cell_rect = (
+                bot_col * cell_width,
+                (bot_row-1) * cell_height,
+                cell_width,
+                cell_height,
+            )
+            # self.window_surface.blit(ice_img, (rect[0], rect[1]))
+            human_img = pygame.transform.scale(self.human_images[last_action], (cell_width, cell_height))
+            self.window_surface.blit(human_img, (cell_rect[0], cell_rect[1]))
+        elif (bot_col<self.ncol-1 and desc[bot_row][bot_col+1] == b"H" and last_action == RIGHT):
+            cell_rect = (
+                (bot_col+1) * cell_width,
+                bot_row * cell_height,
+                cell_width,
+                cell_height,
+            )
+            # self.window_surface.blit(ice_img, (rect[0], rect[1]))
+            human_img = pygame.transform.scale(self.human_images[last_action], (cell_width, cell_height))
+            self.window_surface.blit(human_img, (cell_rect[0], cell_rect[1]))
+        elif (bot_row>0 and desc[bot_row][bot_col-1] == b"H" and last_action == LEFT):
+            cell_rect = (
+                (bot_col-1) * cell_width,
+                bot_row * cell_height,
+                cell_width,
+                cell_height,
+            )
+            # self.window_surface.blit(ice_img, (rect[0], rect[1]))
+            human_img = pygame.transform.scale(self.human_images[last_action], (cell_width, cell_height))
+            self.window_surface.blit(human_img, (cell_rect[0], cell_rect[1]))
         cell_rect = (
             bot_col * cell_width,
             bot_row * cell_height,
             cell_width,
             cell_height,
         )
-        if desc[bot_row][bot_col] == b"H":
-            self.window_surface.blit(cracked_human_img, (cell_rect[0], cell_rect[1]))
-        else:
-            elf_rect = self._center_small_rect(cell_rect, elf_img.get_size())
-            self.window_surface.blit(elf_img, elf_rect)
+        
+        if (desc[bot_row][bot_col] == b"G"):
+            self.window_surface.blit(ice_img, (cell_rect[0], cell_rect[1]))
+            # goal_rect = self._center_small_rect(rect, goal_img.get_size())
+            # self.window_surface.blit(goal_img, goal_rect)
+        elf_rect = self._center_small_rect(cell_rect, elf_img.get_size())
+        self.window_surface.blit(elf_img, elf_rect)
 
         pygame.event.pump()
         pygame.display.update()
@@ -364,9 +447,10 @@ if __name__ == "__main__":
         "env": VacuumCleanerEnv,
         "env_config": {
         "desc": None,
-        "map_name":"5x5",
+        "map_name":"6x6",
+        # "render.modes": "gui,"
         },
-        "num_workers": 2,
+        "num_workers": 1,
         "framework": "torch",
         "model": {
             "fcnet_hiddens": [32, 32],    # Number of hidden layers
@@ -376,13 +460,13 @@ if __name__ == "__main__":
         # Only for evaluation runs, render the env.
         "evaluation_config": {
             "render_env": True,
-            "render_mode": "gui",
+            "render.mode": "gui",
         },
     }
 
     trainer = PPOTrainer(config=config)
 
-    for i in range(2):
+    for i in range(50):
         result=trainer.train()
         print(pretty_print(result))
         
