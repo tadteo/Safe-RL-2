@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from email.policy import default
-from traceback import print_tb
 import gym
-from pyparsing import replaceWith
 
 import ray
 from ray import tune
@@ -15,7 +12,8 @@ from envs.vacuum_cleaner_env import VacuumCleanerEnv
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--stop-iters", type=int, default=4000)
-
+parser.add_argument("--checkpoint-path", type=str, default=None)
+parser.add_argument("--use-safe-env", type=bool, default=False)
 
 config = {
     "env": VacuumCleanerEnv,
@@ -33,13 +31,13 @@ config = {
         "epsilon_timesteps": 1e7,  # Timesteps over which to anneal epsilon, defult is int(1e5).
     },
     # "horizon": 500,
-    "num_workers": 12,
+    "num_workers": 18,
     "framework": "torch",
     "model": {
         "fcnet_hiddens": [64, 64],    # Number of hidden layers
         "fcnet_activation": "relu", # Activation function
     },
-    "evaluation_num_workers": 1,
+    "evaluation_num_workers": 4,
     "evaluation_interval": 1,
     # Only for evaluation runs, render the env.
     "evaluation_config": {
@@ -60,7 +58,7 @@ class MyExperiment():
             self.trainer,
             stop=stop_criteria,
             config=self.config,
-            # local_dir="~/ray_results",
+            local_dir="./results",
             keep_checkpoints_num=3,
             checkpoint_freq=5,
             checkpoint_at_end=True,
@@ -102,13 +100,20 @@ class MyExperiment():
         
         return episode_reward
         
-def main(debug_mode=False, stop_criteria=None, use_safe_env=False):
+def main(stop_criteria=None, use_safe_env=False, checkpoint_path=None):
     exp = MyExperiment()
     
-    # checkpoint_path, results = exp.train(stop_criteria={"training_iteration": stop_criteria})
-    print("Finished training!")
+    if (checkpoint_path == None):
+        print("No checkpoint provided - training from scratch")
+        checkpoint_path, results = exp.train(stop_criteria={"training_iteration": stop_criteria})
+        print("Finished training!")
+    else :
+        print("Checkpoint provided - loading from checkpoint")    
     
-    checkpoint_path = "/home/matteo/ray_results/PPO_2022-04-22_15-59-50/PPO_VacuumCleanerEnv_7a549_00000_0_2022-04-22_15-59-50/checkpoint_004000/checkpoint-4000"
+    exp.load(checkpoint_path)
+    print("Finished loading!")
+    
+    # checkpoint_path = "/home/matteo/ray_results/PPO_2022-04-22_15-59-50/PPO_VacuumCleanerEnv_7a549_00000_0_2022-04-22_15-59-50/checkpoint_004000/checkpoint-4000"
     
     print("Testing trained agent!\nLoading checkpoint:", checkpoint_path)    
     exp.load(checkpoint_path)
@@ -120,6 +125,6 @@ def main(debug_mode=False, stop_criteria=None, use_safe_env=False):
     
 if __name__ == "__main__":
     args = parser.parse_args()
-    debug_mode = True
-    use_safe_env = False
-    main(debug_mode, args.stop_iters, use_safe_env)
+    use_safe_env = args.use_safe_env
+    checkpoint = args.checkpoint_path
+    main(args.stop_iters, use_safe_env, checkpoint)
