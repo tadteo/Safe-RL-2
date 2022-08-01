@@ -86,6 +86,7 @@ class MyExperiment():
         while not done:
             env.render()
             action = self.agent.compute_action(obs)
+            print(action)
             obs, reward, done, info = env.step(action)
             episode_reward += reward
         
@@ -102,6 +103,7 @@ def main(debug_mode=False, stop_criteria=None, use_safe_env=False):
     
     print("Starting testing")
     #TODO: visualize environment
+    
     r= exp.test()
     print("Finished testing! Cumulative Episode Reward:",r)
     

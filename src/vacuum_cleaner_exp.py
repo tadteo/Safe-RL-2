@@ -9,10 +9,11 @@ from importlib.resources import path
 from ray.rllib.agents.ppo import PPOTrainer
 from ray.tune.logger import pretty_print
 from envs.vacuum_cleaner_env import VacuumCleanerEnv
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--stop-iters", type=int, default=4000)
-parser.add_argument("--checkpoint-path", type=str, default=None)
+parser.add_argument("--checkpoint-path", type=str, default="/home/matteo/ray_results/PPO_2022-04-22_15-59-50/PPO_VacuumCleanerEnv_7a549_00000_0_2022-04-22_15-59-50/checkpoint_004000/checkpoint-4000")
 parser.add_argument("--use-safe-env", type=bool, default=False)
 
 config = {
@@ -31,17 +32,25 @@ config = {
         "epsilon_timesteps": 1e7,  # Timesteps over which to anneal epsilon, defult is int(1e5).
     },
     # "horizon": 500,
-    "num_workers": 18,
+    "num_workers": 6,
+    "batch_mode": "complete_episodes",
     "framework": "torch",
     "model": {
         "fcnet_hiddens": [64, 64],    # Number of hidden layers
         "fcnet_activation": "relu", # Activation function
     },
-    "evaluation_num_workers": 4,
+    "preprocessor_pref": None,
+    "evaluation_num_workers": 1,
     "evaluation_interval": 1,
     # Only for evaluation runs, render the env.
     "evaluation_config": {
-        "render_env": False,
+        "render_env": True,
+        "video_dir": "/home/matteo/ray_videos/",
+        "episodes": 1,
+        "save_info": True,
+        "use_shelve": True,
+        "track_progress": True,
+        "output": "/home/matteo/ray_eval_results/",
     },
 }
 
@@ -73,6 +82,18 @@ class MyExperiment():
         print("Checkpoint path:", checkpoint_path)
         return checkpoint_path, results
     
+    def getAction(self, observation):
+        state = []
+        # preprocessed = self.agent.local_evaluator.preprocessors["default"].transform(observation)
+        # filtered_obs = self.agent.local_evaluator.filters['default'](preprocessed, update=False)
+        policy = self.agent.get_policy()
+        print(policy)
+        result = policy.compute_single_action(observation,full_fetch=True)
+        print(result)
+        action = result[0]
+        probs = softmax(result[2]["logits"]) # imported from scipy.special
+        return action, probs
+    
     def load(self,path):
         """
         Load a trained RLlib agent from the specified path. Call this before testing a trained agent.
@@ -94,8 +115,15 @@ class MyExperiment():
         
         while not done:
             env.render()
-            action = self.agent.compute_action(obs)
-            obs, reward, done, info = env.step(action)
+            action = self.agent.compute_single_action(obs,full_fetch=True)
+            print(f"AAAAAAACTION: {action}")
+            action_dist = action[2]["action_dist_inputs"]
+            print(f"ACTION_DIST: {action_dist}")
+            probs = np.exp(action_dist) / (np.exp(action_dist)).sum()
+            print(f"{probs}, summa: {probs.sum()}")
+            obs, reward, done, info = env.step(action[0])
+            # original_obs = self.agent.model.restore_original_dimensions(obs, env.obs_space, "torch")
+            print("obs:", obs)
             episode_reward += reward
         
         return episode_reward
@@ -119,7 +147,7 @@ def main(stop_criteria=None, use_safe_env=False, checkpoint_path=None):
     exp.load(checkpoint_path)
     
     print("Starting testing")
-    #TODO: visualize environment
+    # exp.agent.evaluate()
     r= exp.test()
     print("Finished testing! Cumulative Episode Reward:",r)
     
@@ -128,3 +156,4 @@ if __name__ == "__main__":
     use_safe_env = args.use_safe_env
     checkpoint = args.checkpoint_path
     main(args.stop_iters, use_safe_env, checkpoint)
+

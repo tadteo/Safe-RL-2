@@ -295,23 +295,23 @@ class VacuumCleanerEnv(discrete.DiscreteEnv):
             self.clock = pygame.time.Clock()
         if self.human_images is None:
             humans = [
-                path.join(path.dirname(__file__), "../img/elf_right.png"),
-                path.join(path.dirname(__file__), "../img/elf_up.png"),
-                path.join(path.dirname(__file__), "../img/elf_left.png"),
-                path.join(path.dirname(__file__), "../img/elf_down.png"),
+                path.join(path.dirname(__file__), "../../img/elf_right.png"),
+                path.join(path.dirname(__file__), "../../img/elf_up.png"),
+                path.join(path.dirname(__file__), "../../img/elf_left.png"),
+                path.join(path.dirname(__file__), "../../img/elf_down.png"),
             ]
             self.human_images = [pygame.image.load(file_name) for file_name in humans]
         if self.ice_img is None:
-            file_name = path.join(path.dirname(__file__), "../img/ice.png")
+            file_name = path.join(path.dirname(__file__), "../../img/ice.png")
             self.ice_img = pygame.image.load(file_name)
         if self.goal_img is None:
-            file_name = path.join(path.dirname(__file__), "../img/dirt.png")
+            file_name = path.join(path.dirname(__file__), "../../img/dirt.png")
             self.goal_img = pygame.image.load(file_name)
         if self.start_img is None:
-            file_name = path.join(path.dirname(__file__), "../img/stool.png")
+            file_name = path.join(path.dirname(__file__), "../../img/stool.png")
             self.start_img = pygame.image.load(file_name)
         if self.vacuum_cleaner_img is None:
-            file_name = path.join(path.dirname(__file__), "../img/vc.png")
+            file_name = path.join(path.dirname(__file__), "../../img/vc.png")
             self.vacuum_cleaner_img = pygame.image.load(file_name)
 
         cell_width = self.window_size[0] // self.ncol

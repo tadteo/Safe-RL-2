@@ -18,6 +18,7 @@ def train_SAC_agent():
             "fcnet_hiddens": [64, 64],    # Number of hidden layers
             "fcnet_activation": "relu", # Activation function
         },
+        
         "evaluation_num_workers": 1,
         # Only for evaluation runs, render the env.
         "evaluation_config": {
